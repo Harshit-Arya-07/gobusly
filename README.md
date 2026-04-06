@@ -159,7 +159,7 @@ Or build and run the packaged JAR:
 ```bash
 cd backend
 mvn clean package
-java -jar target/bus-booking-system-0.0.1-SNAPSHOT.jar
+java -jar target/gobusly-0.0.1-SNAPSHOT.jar
 ```
 
 ### Frontend
@@ -179,6 +179,48 @@ cd frontend
 npm run build
 npm run preview
 ```
+
+## Deployment (Short)
+
+### Backend (Render - Docker)
+
+- Language: `Docker`
+- Branch: `main`
+- Root Directory: `backend`
+- Dockerfile Path: `Dockerfile`
+
+Important: If Root Directory is `backend`, then Dockerfile Path must be only `Dockerfile` (not `backend/Dockerfile`).
+
+Add these Environment Variables in Render:
+
+- `SPRING_DATA_MONGODB_URI`
+- `APP_JWT_SECRET`
+- `APP_JWT_EXPIRATION_MS=86400000`
+- `APP_PAYMENT_RAZORPAY_KEY_ID`
+- `APP_PAYMENT_RAZORPAY_KEY_SECRET`
+- `SPRING_MAIL_HOST=smtp.gmail.com`
+- `SPRING_MAIL_PORT=587`
+- `SPRING_MAIL_USERNAME`
+- `SPRING_MAIL_PASSWORD`
+- `SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH=true`
+- `SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE=true`
+- `APP_MAIL_FROM`
+- `FRONTEND_URL=https://<your-vercel-domain>`
+
+### Frontend (Vercel)
+
+- Framework: `Vite`
+- Root Directory: `frontend`
+- Build Command: `npm run build`
+- Output Directory: `dist`
+
+Add this Environment Variable in Vercel:
+
+- `VITE_API_BASE_URL=https://<your-render-backend-domain>/api`
+
+### CORS Note
+
+Allow your Vercel frontend domain in backend CORS config (`SecurityConfig`) before production use.
 
 ## Main UI pages
 
