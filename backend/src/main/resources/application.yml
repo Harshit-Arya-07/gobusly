@@ -1,0 +1,30 @@
+spring:
+  data:
+    mongodb:
+      uri: ${SPRING_DATA_MONGODB_URI:mongodb://localhost:27017/busdb}
+  mail:
+    host: ${SPRING_MAIL_HOST:smtp.gmail.com}
+    port: ${SPRING_MAIL_PORT:587}
+    username: ${SPRING_MAIL_USERNAME:}
+    password: ${SPRING_MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: ${SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH:true}
+          starttls:
+            enable: ${SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE:true}
+
+server:
+  error:
+    include-message: always
+
+app:
+  jwt:
+    secret: ${APP_JWT_SECRET:YXBwLWRldi1qd3Qtc2VjcmV0LWNoYW5nZS1pbi1wcm9kdWN0aW9u}
+    expiration-ms: ${APP_JWT_EXPIRATION_MS:86400000}
+  payment:
+    razorpay:
+      key-id: ${APP_PAYMENT_RAZORPAY_KEY_ID:rzp_test_dummy}
+      key-secret: ${APP_PAYMENT_RAZORPAY_KEY_SECRET:dummy_secret}
+  mail:
+    from: ${APP_MAIL_FROM:no-reply@gobusly.local}
