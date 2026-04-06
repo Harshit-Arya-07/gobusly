@@ -25,3 +25,7 @@ backend/.mvn/
 .env
 .env.*
 !.env.example
+
+# Sensitive app configs
+application.properties
+backend/src/main/resources/application.properties
