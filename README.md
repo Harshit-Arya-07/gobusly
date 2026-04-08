@@ -2,7 +2,7 @@
 
 A full-stack bus booking platform with a Spring Boot + MongoDB backend and a React + Vite frontend. The app supports bus search, seat selection, bookings, Razorpay payments, payment history, admin bus management, admin booking management, user authentication, email notifications after successful payment, and role-based access control.
 
-## Features
+## Features 
 
 ### User features
 - Search buses by source, destination, and travel date
