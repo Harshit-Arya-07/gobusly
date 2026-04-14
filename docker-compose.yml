@@ -42,6 +42,8 @@ services:
       SPRING_DATA_MONGODB_URI: mongodb://mongodb:27017/busdb
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: "6379"
+      APP_JWT_SECRET: YXBwLWRldi1qd3Qtc2VjcmV0LWNoYW5nZS1pbi1wcm9kdWN0aW9u
+      APP_JWT_EXPIRATION_MS: "86400000"
       APP_CACHE_CLEANUP_LEGACY_PREFIXES: "false"
     ports:
       - "8080:8080"

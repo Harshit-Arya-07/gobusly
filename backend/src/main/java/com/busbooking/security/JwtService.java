@@ -1,10 +1,12 @@
 package com.busbooking.security;
 
+import jakarta.annotation.PostConstruct;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
@@ -16,13 +18,30 @@ import java.util.Map;
 import java.util.function.Function;
 
 @Service
+@Slf4j
 public class JwtService {
 
-    @Value("${app.jwt.secret}")
+    private static final String DEFAULT_BASE64_SECRET = "YXBwLWRldi1qd3Qtc2VjcmV0LWNoYW5nZS1pbi1wcm9kdWN0aW9u";
+    private static final long DEFAULT_EXPIRATION_MS = 86_400_000L;
+
+    @Value("${app.jwt.secret:${APP_JWT_SECRET:" + DEFAULT_BASE64_SECRET + "}}")
     private String jwtSecret;
 
-    @Value("${app.jwt.expiration-ms}")
+    @Value("${app.jwt.expiration-ms:${APP_JWT_EXPIRATION_MS:" + DEFAULT_EXPIRATION_MS + "}}")
     private long jwtExpirationMs;
+
+    @PostConstruct
+    void initializeJwtConfig() {
+        if (jwtSecret == null || jwtSecret.isBlank()) {
+            jwtSecret = DEFAULT_BASE64_SECRET;
+            log.warn("JWT secret was missing; using development fallback. Set APP_JWT_SECRET in production.");
+        }
+
+        if (jwtExpirationMs <= 0) {
+            jwtExpirationMs = DEFAULT_EXPIRATION_MS;
+            log.warn("JWT expiration was invalid; using default {} ms", DEFAULT_EXPIRATION_MS);
+        }
+    }
 
     public String extractUsername(String token) {
         return extractClaim(token, Claims::getSubject);
