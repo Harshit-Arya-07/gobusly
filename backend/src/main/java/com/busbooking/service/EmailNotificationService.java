@@ -29,6 +29,9 @@ public class EmailNotificationService {
     @Value("${app.mail.from}")
     private String fromEmail;
 
+    @Value("${spring.mail.username:}")
+    private String mailUsername;
+
     @Async
     public void sendPaymentSuccessEmail(User user, Bus bus, PaymentHistory payment) {
         if (user.getEmail() == null || user.getEmail().isBlank()) {
@@ -64,19 +67,35 @@ public class EmailNotificationService {
                 + "Thank you for booking with gobusly.";
 
         try {
+            String senderEmail = resolveSenderEmail();
             SimpleMailMessage message = new SimpleMailMessage();
-            message.setFrom(fromEmail);
+            if (senderEmail != null && !senderEmail.isBlank()) {
+                message.setFrom(senderEmail);
+            }
             message.setTo(user.getEmail());
             message.setSubject(subject);
             message.setText(body);
             mailSender.send(message);
             log.info("Payment success email sent: paymentId={}, to={}", payment.getId(), user.getEmail());
         } catch (Exception ex) {
-            log.warn("Failed to send payment success email for payment {}: {}", payment.getId(), ex.getMessage());
+            log.warn("Failed to send payment success email for payment {} to {}: {}",
+                    payment.getId(), user.getEmail(), ex.getMessage(), ex);
         }
     }
 
     private String safe(String value) {
         return value == null || value.isBlank() ? "-" : value;
+    }
+
+    private String resolveSenderEmail() {
+        if (fromEmail != null && !fromEmail.isBlank()) {
+            return fromEmail.trim();
+        }
+
+        if (mailUsername != null && !mailUsername.isBlank()) {
+            return mailUsername.trim();
+        }
+
+        return null;
     }
 }
