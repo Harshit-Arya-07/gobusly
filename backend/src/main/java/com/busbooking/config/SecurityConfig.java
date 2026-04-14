@@ -34,7 +34,7 @@ public class SecurityConfig {
     private final RateLimitingFilter rateLimitingFilter;
     private final UserDetailsService userDetailsService;
 
-    @Value("${FRONTEND_URL:}")
+    @Value("${app.frontend-url:http://localhost:5173}")
     private String frontendUrl;
 
     @Bean
