@@ -3,14 +3,13 @@ package com.busbooking.controller;
 import com.busbooking.dto.ApiMessageResponseDto;
 import com.busbooking.dto.BookingRequestDto;
 import com.busbooking.dto.BookingResponseDto;
+import com.busbooking.dto.PageResponseDto;
 import com.busbooking.service.BookingService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/bookings")
@@ -26,13 +25,18 @@ public class BookingController {
 
     @GetMapping
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<List<BookingResponseDto>> getAllBookings() {
-        return ResponseEntity.ok(bookingService.getAllBookings());
+    public ResponseEntity<PageResponseDto<BookingResponseDto>> getAllBookings(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(bookingService.getAllBookings(page, size));
     }
 
     @GetMapping("/user/{userId}")
-    public ResponseEntity<List<BookingResponseDto>> getBookingsByUserId(@PathVariable String userId) {
-        return ResponseEntity.ok(bookingService.getBookingsByUserId(userId));
+    public ResponseEntity<PageResponseDto<BookingResponseDto>> getBookingsByUserId(
+            @PathVariable String userId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(bookingService.getBookingsByUserId(userId, page, size));
     }
 
     @DeleteMapping("/{id}")

@@ -1,0 +1,46 @@
+services:
+  mongodb:
+    image: mongo:7
+    container_name: bus-booking-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+
+  redis:
+    image: redis:7-alpine
+    container_name: bus-booking-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: bus-booking-backend
+    restart: unless-stopped
+    depends_on:
+      - mongodb
+      - redis
+    environment:
+      SPRING_DATA_MONGODB_URI: mongodb://mongodb:27017/busdb
+      SPRING_DATA_REDIS_URL: redis://redis:6379
+      APP_CACHE_CLEANUP_LEGACY_PREFIXES: "false"
+    ports:
+      - "8080:8080"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: bus-booking-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "3000:80"
+
+volumes:
+  mongodb_data:

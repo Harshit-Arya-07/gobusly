@@ -10,5 +10,9 @@ public interface SeatRepository extends MongoRepository<Seat, String> {
 
     List<Seat> findByBusIdAndSeatNumberIn(String busId, List<Integer> seatNumbers);
 
+    List<Seat> findByBusIdAndSeatNumberGreaterThan(String busId, Integer seatNumber);
+
+    long countByBusIdAndIsBooked(String busId, Boolean isBooked);
+
     void deleteByBusId(String busId);
 }

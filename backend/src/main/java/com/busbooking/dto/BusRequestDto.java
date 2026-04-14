@@ -13,6 +13,8 @@ public class BusRequestDto {
     @NotBlank
     private String busNumber;
 
+    private String busName;
+
     @NotBlank
     private String source;
 

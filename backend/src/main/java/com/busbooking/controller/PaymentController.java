@@ -1,6 +1,7 @@
 package com.busbooking.controller;
 
 import com.busbooking.dto.ApiMessageResponseDto;
+import com.busbooking.dto.PageResponseDto;
 import com.busbooking.dto.PaymentFailureRequestDto;
 import com.busbooking.dto.PaymentHistoryResponseDto;
 import com.busbooking.dto.PaymentOrderRequestDto;
@@ -12,8 +13,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/payments")
@@ -40,13 +39,18 @@ public class PaymentController {
     }
 
     @GetMapping("/user/{userId}")
-    public ResponseEntity<List<PaymentHistoryResponseDto>> getPaymentHistoryByUserId(@PathVariable String userId) {
-        return ResponseEntity.ok(paymentService.getPaymentHistoryByUserId(userId));
+    public ResponseEntity<PageResponseDto<PaymentHistoryResponseDto>> getPaymentHistoryByUserId(
+            @PathVariable String userId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(paymentService.getPaymentHistoryByUserId(userId, page, size));
     }
 
     @GetMapping("/admin")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<List<PaymentHistoryResponseDto>> getAllPaymentHistory() {
-        return ResponseEntity.ok(paymentService.getAllPaymentHistory());
+    public ResponseEntity<PageResponseDto<PaymentHistoryResponseDto>> getAllPaymentHistory(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(paymentService.getAllPaymentHistory(page, size));
     }
 }

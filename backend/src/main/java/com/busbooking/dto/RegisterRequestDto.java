@@ -1,11 +1,14 @@
 package com.busbooking.dto;
 
-import com.busbooking.entity.Role;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
+import lombok.AccessLevel;
 import lombok.Data;
+import lombok.experimental.FieldDefaults;
 
 @Data
+@FieldDefaults(level = AccessLevel.PRIVATE)
 public class RegisterRequestDto {
 
     @NotBlank
@@ -16,7 +19,12 @@ public class RegisterRequestDto {
     private String email;
 
     @NotBlank
-    private String password;
+    @Size(min = 6, message = "Password must be at least 6 characters")
+    String password;
 
-    private Role role;
+    // Optional: if omitted, USER is used.
+    String role;
+
+    // Required only when role=ADMIN.
+    String adminSignupCode;
 }

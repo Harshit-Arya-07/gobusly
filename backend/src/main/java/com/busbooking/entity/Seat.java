@@ -2,8 +2,10 @@ package com.busbooking.entity;
 
 import lombok.*;
 import org.springframework.data.annotation.Id;
+import org.springframework.data.annotation.Version;
 import org.springframework.data.mongodb.core.index.CompoundIndex;
 import org.springframework.data.mongodb.core.index.CompoundIndexes;
+import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 @Document(collection = "seats")
@@ -24,5 +26,9 @@ public class Seat {
 
     private Boolean isBooked;
 
+    @Indexed
     private String busId;
+
+    @Version
+    private Long version;
 }

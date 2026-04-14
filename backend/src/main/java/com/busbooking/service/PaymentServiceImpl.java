@@ -1,5 +1,6 @@
 package com.busbooking.service;
 
+import com.busbooking.dto.PageResponseDto;
 import com.busbooking.dto.PaymentFailureRequestDto;
 import com.busbooking.dto.PaymentHistoryResponseDto;
 import com.busbooking.dto.PaymentOrderRequestDto;
@@ -17,47 +18,52 @@ import com.busbooking.exception.UnauthorizedAccessException;
 import com.busbooking.repository.BusRepository;
 import com.busbooking.repository.PaymentHistoryRepository;
 import com.busbooking.repository.SeatRepository;
-import com.busbooking.repository.UserRepository;
 import com.razorpay.Order;
 import com.razorpay.RazorpayClient;
 import com.razorpay.RazorpayException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
-import java.time.LocalDateTime;
 import java.security.MessageDigest;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class PaymentServiceImpl implements PaymentService {
 
-    private final UserRepository userRepository;
     private final BusRepository busRepository;
     private final SeatRepository seatRepository;
     private final PaymentHistoryRepository paymentHistoryRepository;
     private final EmailNotificationService emailNotificationService;
+    private final SeatLockService seatLockService;
+    private final AuthenticatedUserService authenticatedUserService;
+    private final RazorpayClient razorpayClient;
 
-    @Value("${app.payment.razorpay.key-id}")
+    @Value("${app.payment.razorpay.key-id:}")
     private String razorpayKeyId;
 
-    @Value("${app.payment.razorpay.key-secret}")
+    @Value("${app.payment.razorpay.key-secret:}")
     private String razorpayKeySecret;
-
 
     @Override
     public PaymentOrderResponseDto createOrder(PaymentOrderRequestDto request) {
-        User currentUser = getCurrentUser();
+        validateRazorpayConfiguration();
+        User currentUser = authenticatedUserService.getCurrentUser();
+
         if (currentUser.getRole().equals(Role.ADMIN)) {
             throw new UnauthorizedAccessException("Admin users are not allowed to create booking payments");
         }
@@ -68,7 +74,7 @@ public class PaymentServiceImpl implements PaymentService {
         Bus bus = busRepository.findById(request.getBusId())
                 .orElseThrow(() -> new ResourceNotFoundException("Bus not found with id: " + request.getBusId()));
 
-        List<Integer> requestedSeatNumbers = request.getSeatNumbers().stream().distinct().toList();
+        List<Integer> requestedSeatNumbers = request.getSeatNumbers().stream().distinct().sorted().toList();
         if (requestedSeatNumbers.isEmpty()) {
             throw new InvalidBookingException("At least one seat must be selected");
         }
@@ -82,6 +88,24 @@ public class PaymentServiceImpl implements PaymentService {
         if (hasBookedSeat) {
             throw new InvalidBookingException("One or more selected seats are already booked");
         }
+
+        // Idempotency: if a PENDING order already exists for the same user/bus/seats, return it
+        Optional<PaymentHistory> existingPending = paymentHistoryRepository
+                .findByUserIdAndBusIdAndSeatNumbersAndStatus(
+                        request.getUserId(), bus.getId(), requestedSeatNumbers, PaymentStatus.PENDING);
+        if (existingPending.isPresent()) {
+            PaymentHistory existing = existingPending.get();
+            log.info("Returning existing pending order: orderId={}, userId={}", existing.getOrderId(), currentUser.getId());
+            return PaymentOrderResponseDto.builder()
+                    .keyId(razorpayKeyId)
+                    .orderId(existing.getOrderId())
+                    .amount(existing.getAmountInRupees() * 100L)
+                    .currency("INR")
+                    .receipt(existing.getReceipt())
+                    .build();
+        }
+
+        seatLockService.lockSeats(bus.getId(), requestedSeatNumbers, currentUser.getId());
 
         if (bus.getFareInRupees() == null || bus.getFareInRupees() <= 0) {
             throw new InvalidBookingException("Bus fare is not configured. Please contact admin.");
@@ -103,7 +127,6 @@ public class PaymentServiceImpl implements PaymentService {
                 .build();
 
         try {
-            RazorpayClient razorpayClient = new RazorpayClient(razorpayKeyId, razorpayKeySecret);
             JSONObject orderRequest = new JSONObject();
             orderRequest.put("amount", amount);
             orderRequest.put("currency", "INR");
@@ -119,6 +142,9 @@ public class PaymentServiceImpl implements PaymentService {
             paymentHistory.setUpdatedAt(LocalDateTime.now());
             paymentHistoryRepository.save(paymentHistory);
 
+            log.info("Payment order created: orderId={}, userId={}, busId={}, amount={}",
+                    orderId, currentUser.getId(), bus.getId(), amount);
+
             return PaymentOrderResponseDto.builder()
                     .keyId(razorpayKeyId)
                     .orderId(orderId)
@@ -127,25 +153,37 @@ public class PaymentServiceImpl implements PaymentService {
                     .receipt(receipt)
                     .build();
         } catch (RazorpayException ex) {
+            seatLockService.releaseSeatLocks(bus.getId(), requestedSeatNumbers, currentUser.getId());
             paymentHistory.setStatus(PaymentStatus.FAILED);
             paymentHistory.setFailureReason("Unable to initialize payment: " + ex.getMessage());
             paymentHistory.setUpdatedAt(LocalDateTime.now());
             paymentHistoryRepository.save(paymentHistory);
+            log.error("Razorpay order creation failed for userId={}, busId={}: {}",
+                    currentUser.getId(), bus.getId(), ex.getMessage());
             throw new InvalidBookingException("Unable to initialize payment: " + ex.getMessage());
         } catch (Exception ex) {
+            seatLockService.releaseSeatLocks(bus.getId(), requestedSeatNumbers, currentUser.getId());
             paymentHistory.setStatus(PaymentStatus.FAILED);
             paymentHistory.setFailureReason("Unable to initialize payment");
             paymentHistory.setUpdatedAt(LocalDateTime.now());
             paymentHistoryRepository.save(paymentHistory);
+            log.error("Payment order creation failed unexpectedly for userId={}, busId={}",
+                    currentUser.getId(), bus.getId(), ex);
             throw new InvalidBookingException("Unable to initialize payment");
         }
     }
 
     @Override
     public void verifyPaymentSignature(PaymentVerifyRequestDto request) {
-        PaymentHistory paymentHistory = paymentHistoryRepository.findByOrderId(request.getRazorpayOrderId())
-                .orElseThrow(() -> new ResourceNotFoundException("Payment order not found"));
+        validateRazorpayConfiguration();
+        PaymentHistory paymentHistory = findLatestPaymentByOrderId(request.getRazorpayOrderId());
         validatePaymentAccess(paymentHistory.getUserId());
+
+        // Idempotency guard: if already verified, skip re-verification
+        if (PaymentStatus.SUCCESS.equals(paymentHistory.getStatus())) {
+            log.info("Payment already verified (idempotent): orderId={}", request.getRazorpayOrderId());
+            return;
+        }
 
         try {
             String payload = request.getRazorpayOrderId() + "|" + request.getRazorpayPaymentId();
@@ -166,28 +204,38 @@ public class PaymentServiceImpl implements PaymentService {
             paymentHistory.setUpdatedAt(LocalDateTime.now());
             paymentHistoryRepository.save(paymentHistory);
 
-            User bookingUser = userRepository.findById(paymentHistory.getUserId())
-                    .orElse(null);
-            Bus bookingBus = busRepository.findById(paymentHistory.getBusId())
-                    .orElse(null);
-            if (bookingUser != null) {
-                emailNotificationService.sendPaymentSuccessEmail(bookingUser, bookingBus, paymentHistory);
-            }
+            log.info("Payment verified: orderId={}, paymentId={}, userId={}",
+                    request.getRazorpayOrderId(), request.getRazorpayPaymentId(), paymentHistory.getUserId());
+
+            User bookingUser = authenticatedUserService.getCurrentUser();
+            Bus bookingBus = busRepository.findById(paymentHistory.getBusId()).orElse(null);
+            emailNotificationService.sendPaymentSuccessEmail(bookingUser, bookingBus, paymentHistory);
+
+        } catch (InvalidBookingException ex) {
+            paymentHistory.setStatus(PaymentStatus.FAILED);
+            paymentHistory.setPaymentId(request.getRazorpayPaymentId());
+            paymentHistory.setFailureReason(ex.getMessage());
+            paymentHistory.setUpdatedAt(LocalDateTime.now());
+            paymentHistoryRepository.save(paymentHistory);
+            throw ex;
         } catch (Exception ex) {
             paymentHistory.setStatus(PaymentStatus.FAILED);
             paymentHistory.setPaymentId(request.getRazorpayPaymentId());
             paymentHistory.setFailureReason(ex.getMessage());
             paymentHistory.setUpdatedAt(LocalDateTime.now());
             paymentHistoryRepository.save(paymentHistory);
+            log.error("Payment verification failed for orderId={}: {}",
+                    request.getRazorpayOrderId(), ex.getMessage());
             throw new InvalidBookingException("Payment verification failed: " + ex.getMessage());
         }
     }
 
     @Override
     public void markPaymentFailed(PaymentFailureRequestDto request) {
-        PaymentHistory paymentHistory = paymentHistoryRepository.findByOrderId(request.getRazorpayOrderId())
-                .orElseThrow(() -> new ResourceNotFoundException("Payment order not found"));
+        PaymentHistory paymentHistory = findLatestPaymentByOrderId(request.getRazorpayOrderId());
         validatePaymentAccess(paymentHistory.getUserId());
+
+        seatLockService.releaseSeatLocks(paymentHistory.getBusId(), paymentHistory.getSeatNumbers(), paymentHistory.getUserId());
 
         paymentHistory.setStatus(PaymentStatus.FAILED);
         if (request.getRazorpayPaymentId() != null && !request.getRazorpayPaymentId().isBlank()) {
@@ -196,29 +244,22 @@ public class PaymentServiceImpl implements PaymentService {
         paymentHistory.setFailureReason(request.getReason() == null ? "Payment failed" : request.getReason());
         paymentHistory.setUpdatedAt(LocalDateTime.now());
         paymentHistoryRepository.save(paymentHistory);
+
+        log.info("Payment marked as failed: orderId={}, reason={}", request.getRazorpayOrderId(), request.getReason());
     }
 
     @Override
-    public List<PaymentHistoryResponseDto> getPaymentHistoryByUserId(String userId) {
+    public PageResponseDto<PaymentHistoryResponseDto> getPaymentHistoryByUserId(String userId, int page, int size) {
         validatePaymentAccess(userId);
 
-        return paymentHistoryRepository.findByUserIdOrderByCreatedAtDesc(userId)
-                .stream()
-                .map(this::mapPaymentHistory)
-                .toList();
+        Pageable pageable = PageRequest.of(page, size);
+        Page<PaymentHistory> paymentPage = paymentHistoryRepository.findByUserIdOrderByCreatedAtDesc(userId, pageable);
+        return buildPageResponse(paymentPage);
     }
 
     @Override
-    public List<PaymentHistoryResponseDto> getAllPaymentHistory() {
-        User currentUser = getCurrentUser();
-        if (!Role.ADMIN.equals(currentUser.getRole())) {
-            throw new UnauthorizedAccessException("Admin access required");
-        }
-
-        return paymentHistoryRepository.findAllByOrderByCreatedAtDesc()
-                .stream()
-                .map(this::mapPaymentHistory)
-                .toList();
+    public PageResponseDto<PaymentHistoryResponseDto> getAllPaymentHistory(int page, int size) {
+        throw new UnauthorizedAccessException("Admin role can only add buses");
     }
 
     private String generateHmacSHA256(String data, String secret) throws Exception {
@@ -226,55 +267,76 @@ public class PaymentServiceImpl implements PaymentService {
         SecretKeySpec secretKeySpec = new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
         mac.init(secretKeySpec);
         byte[] hmac = mac.doFinal(data.getBytes(StandardCharsets.UTF_8));
-        
+
         StringBuilder hexString = new StringBuilder();
         for (byte b : hmac) {
             String hex = Integer.toHexString(0xff & b);
-            if (hex.length() == 1) hexString.append('0');
+            if (hex.length() == 1) {
+                hexString.append('0');
+            }
             hexString.append(hex);
         }
         return hexString.toString();
     }
 
     private PaymentHistoryResponseDto mapPaymentHistory(PaymentHistory paymentHistory) {
+        Bus bus = paymentHistory.getBusId() == null ? null : busRepository.findById(paymentHistory.getBusId()).orElse(null);
         return PaymentHistoryResponseDto.builder()
                 .id(paymentHistory.getId())
                 .userId(paymentHistory.getUserId())
                 .busId(paymentHistory.getBusId())
+            .busName(bus == null ? null : bus.getBusName())
                 .seatNumbers(paymentHistory.getSeatNumbers())
                 .amountInRupees(paymentHistory.getAmountInRupees())
                 .orderId(paymentHistory.getOrderId())
                 .paymentId(paymentHistory.getPaymentId())
                 .receipt(paymentHistory.getReceipt())
-                .status(paymentHistory.getStatus().name())
+                .status(paymentHistory.getStatus() == null ? "PENDING" : paymentHistory.getStatus().name())
                 .failureReason(paymentHistory.getFailureReason())
                 .createdAt(paymentHistory.getCreatedAt())
                 .updatedAt(paymentHistory.getUpdatedAt())
                 .build();
     }
 
+    private PageResponseDto<PaymentHistoryResponseDto> buildPageResponse(Page<PaymentHistory> paymentPage) {
+        List<PaymentHistoryResponseDto> content = paymentPage.getContent()
+                .stream()
+                .map(this::mapPaymentHistory)
+                .toList();
+
+        return PageResponseDto.<PaymentHistoryResponseDto>builder()
+                .content(content)
+                .page(paymentPage.getNumber())
+                .size(paymentPage.getSize())
+                .totalElements(paymentPage.getTotalElements())
+                .totalPages(paymentPage.getTotalPages())
+                .last(paymentPage.isLast())
+                .build();
+    }
+
     private void validatePaymentAccess(String userId) {
-        User currentUser = getCurrentUser();
-        if (!currentUser.getRole().equals(Role.ADMIN) && !currentUser.getId().equals(userId)) {
+        User currentUser = authenticatedUserService.getCurrentUser();
+        if (!currentUser.getId().equals(userId)) {
             throw new UnauthorizedAccessException("You can only access your own payment history");
         }
     }
 
-    private User getCurrentUser() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication == null || authentication.getPrincipal() == null) {
-            throw new UnauthorizedAccessException("Unauthenticated access");
+    private PaymentHistory findLatestPaymentByOrderId(String orderId) {
+        List<PaymentHistory> matches = paymentHistoryRepository.findByOrderIdOrderByUpdatedAtDesc(orderId);
+        if (matches == null || matches.isEmpty()) {
+            throw new ResourceNotFoundException("Payment order not found");
         }
 
-        String email;
-        Object principal = authentication.getPrincipal();
-        if (principal instanceof UserDetails userDetails) {
-            email = userDetails.getUsername();
-        } else {
-            email = authentication.getName();
+        if (matches.size() > 1) {
+            log.warn("Multiple payment history records found for same orderId={}, using latest", orderId);
         }
 
-        return userRepository.findByEmail(email)
-                .orElseThrow(() -> new UnauthorizedAccessException("Current user not found"));
+        return matches.get(0);
+    }
+
+    private void validateRazorpayConfiguration() {
+        if (razorpayKeyId == null || razorpayKeyId.isBlank() || razorpayKeySecret == null || razorpayKeySecret.isBlank()) {
+            throw new InvalidBookingException("Razorpay keys are missing. Set APP_PAYMENT_RAZORPAY_KEY_ID and APP_PAYMENT_RAZORPAY_KEY_SECRET.");
+        }
     }
 }

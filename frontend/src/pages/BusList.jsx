@@ -44,7 +44,7 @@ export default function BusList() {
     const filtered = buses.filter((bus) => {
       if (!normalized) return true;
 
-      return [bus.busNumber, bus.source, bus.destination]
+      return [bus.busName, bus.busNumber, bus.source, bus.destination]
         .filter(Boolean)
         .some((value) => value.toLowerCase().includes(normalized));
     });
@@ -68,7 +68,7 @@ export default function BusList() {
 
   return (
     <section className="container section-space">
-      <div className="section-head">
+      <div className="section-head redesign-results-head card">
         <h2>Available Buses</h2>
         <p className="muted">{searchSummary}{date ? ` | ${date}` : ''}</p>
       </div>
@@ -88,7 +88,7 @@ export default function BusList() {
         </article>
       </div>
 
-      <div className="card bus-filters">
+      <div className="card bus-filters redesign-filters">
         <label>
           Quick Filter
           <input
@@ -115,7 +115,7 @@ export default function BusList() {
         <div className="card empty-state">No buses found for this route.</div>
       )}
 
-      <div className="grid-cards">
+      <div className="grid-cards results-list-grid">
         {displayBuses.map((bus) => (
           <BusCard key={bus.id} bus={bus} />
         ))}

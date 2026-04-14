@@ -27,46 +27,59 @@ export default function Home() {
   };
 
   return (
-    <section className="hero">
-      <div className="hero-grid container">
-        <div className="hero-copy">
-          <p className="eyebrow">Smart Intercity Travel</p>
-          <h1>Book bus seats in seconds, travel stress-free.</h1>
+    <section className="hero redesign-hero">
+      <div className="hero-bg-orb hero-bg-orb-left"></div>
+      <div className="hero-bg-orb hero-bg-orb-right"></div>
+
+      <div className="hero-grid container redesign-hero-grid">
+        <div className="hero-copy redesign-hero-copy">
+          <p className="eyebrow">Journey Beyond Destinations</p>
+          <h1>
+            Book Fast.
+            <span className="hero-highlight"> Ride Calm.</span>
+          </h1>
           <p className="muted large">
-            Search routes, inspect live seat availability, and confirm bookings with a smooth, modern flow.
+            Discover buses across routes, pick your exact seats, and confirm booking in a frictionless flow.
           </p>
-          <div className="hero-points">
-            <span className="hero-pill">Live seat availability</span>
-            <span className="hero-pill">Secure online payment</span>
-            <span className="hero-pill">Instant booking status</span>
+          <div className="hero-points redesign-pill-row">
+            <span className="hero-pill">10,000+ Routes</span>
+            <span className="hero-pill">Live Seat Map</span>
+            <span className="hero-pill">Secure Checkout</span>
           </div>
         </div>
-        <form className="card search-form hero-search-card" onSubmit={handleSubmit}>
-          <h2>Search Buses</h2>
+
+        <form className="card search-form hero-search-card redesign-search-card" onSubmit={handleSubmit}>
+          <h2>Find Your Bus</h2>
+
+          <div className="search-row-grid">
+            <label>
+              From
+              <input
+                name="source"
+                value={form.source}
+                onChange={handleChange}
+                placeholder="e.g. Delhi"
+                required
+              />
+            </label>
+
+            <label>
+              To
+              <input
+                name="destination"
+                value={form.destination}
+                onChange={handleChange}
+                placeholder="e.g. Jaipur"
+                required
+              />
+            </label>
+          </div>
+
           <label>
-            Source
-            <input
-              name="source"
-              value={form.source}
-              onChange={handleChange}
-              placeholder="e.g. Delhi"
-              required
-            />
-          </label>
-          <label>
-            Destination
-            <input
-              name="destination"
-              value={form.destination}
-              onChange={handleChange}
-              placeholder="e.g. Jaipur"
-              required
-            />
-          </label>
-          <label>
-            Date
+            Travel Date
             <input name="date" type="date" value={form.date} onChange={handleChange} />
           </label>
+
           <button className="btn btn-solid" type="submit">Search Buses</button>
         </form>
       </div>

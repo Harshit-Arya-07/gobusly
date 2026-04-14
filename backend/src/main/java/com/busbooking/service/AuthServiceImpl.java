@@ -5,18 +5,24 @@ import com.busbooking.dto.AuthResponseDto;
 import com.busbooking.dto.RegisterRequestDto;
 import com.busbooking.entity.Role;
 import com.busbooking.entity.User;
+import com.busbooking.exception.DuplicateEmailException;
 import com.busbooking.exception.InvalidBookingException;
 import com.busbooking.repository.UserRepository;
 import com.busbooking.security.JwtService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import java.util.Locale;
+
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class AuthServiceImpl implements AuthService {
 
     private final UserRepository userRepository;
@@ -24,30 +30,38 @@ public class AuthServiceImpl implements AuthService {
     private final JwtService jwtService;
     private final AuthenticationManager authenticationManager;
 
+        @Value("${app.auth.admin-signup-code:}")
+        private String adminSignupCode;
+
     @Override
     public AuthResponseDto register(RegisterRequestDto request) {
         if (userRepository.existsByEmail(request.getEmail())) {
-            throw new InvalidBookingException("Email is already in use");
+            throw new DuplicateEmailException("Email is already in use");
         }
 
-        Role role = request.getRole() == null ? Role.USER : request.getRole();
+        Role requestedRole = parseRequestedRole(request.getRole());
+        if (Role.ADMIN.equals(requestedRole)) {
+            if (adminSignupCode == null || adminSignupCode.isBlank()) {
+                throw new InvalidBookingException("Admin signup is disabled. Please contact system administrator.");
+            }
+
+            if (request.getAdminSignupCode() == null || request.getAdminSignupCode().isBlank()
+                    || !adminSignupCode.equals(request.getAdminSignupCode())) {
+                throw new InvalidBookingException("Invalid admin signup code");
+            }
+        }
 
         User user = User.builder()
                 .name(request.getName())
                 .email(request.getEmail())
                 .password(passwordEncoder.encode(request.getPassword()))
-                .role(role)
+                .role(requestedRole)
                 .build();
 
         User savedUser = userRepository.save(user);
+        log.info("New user registered: id={}, email={}", savedUser.getId(), savedUser.getEmail());
 
-        UserDetails userDetails = org.springframework.security.core.userdetails.User
-                .withUsername(savedUser.getEmail())
-                .password(savedUser.getPassword())
-                .roles(savedUser.getRole().name())
-                .build();
-
-        String token = jwtService.generateToken(userDetails);
+        String token = generateTokenForUser(savedUser);
 
         return AuthResponseDto.builder()
                 .token(token)
@@ -58,6 +72,18 @@ public class AuthServiceImpl implements AuthService {
                 .build();
     }
 
+        private Role parseRequestedRole(String roleValue) {
+                if (roleValue == null || roleValue.isBlank()) {
+                        return Role.USER;
+                }
+
+                try {
+                        return Role.valueOf(roleValue.trim().toUpperCase(Locale.ROOT));
+                } catch (IllegalArgumentException ex) {
+                        throw new InvalidBookingException("Invalid role. Allowed values are USER and ADMIN.");
+                }
+        }
+
     @Override
     public AuthResponseDto login(AuthRequestDto request) {
         authenticationManager.authenticate(
@@ -67,13 +93,9 @@ public class AuthServiceImpl implements AuthService {
         User user = userRepository.findByEmail(request.getEmail())
                 .orElseThrow(() -> new InvalidBookingException("Invalid email or password"));
 
-        UserDetails userDetails = org.springframework.security.core.userdetails.User
-                .withUsername(user.getEmail())
-                .password(user.getPassword())
-                .roles(user.getRole().name())
-                .build();
+        log.info("User logged in: id={}, email={}", user.getId(), user.getEmail());
 
-        String token = jwtService.generateToken(userDetails);
+        String token = generateTokenForUser(user);
 
         return AuthResponseDto.builder()
                 .token(token)
@@ -82,5 +104,19 @@ public class AuthServiceImpl implements AuthService {
                 .email(user.getEmail())
                 .role(user.getRole().name())
                 .build();
+    }
+
+    /**
+     * Builds a Spring Security {@link UserDetails} from the domain user
+     * and generates a JWT token.
+     */
+    private String generateTokenForUser(User user) {
+        UserDetails userDetails = org.springframework.security.core.userdetails.User
+                .withUsername(user.getEmail())
+                .password(user.getPassword())
+                .roles(user.getRole().name())
+                .build();
+
+        return jwtService.generateToken(userDetails);
     }
 }

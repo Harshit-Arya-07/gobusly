@@ -1,5 +1,17 @@
 import api from './api';
 
+function unwrapListPayload(payload) {
+  if (Array.isArray(payload)) {
+    return payload;
+  }
+
+  if (Array.isArray(payload?.content)) {
+    return payload.content;
+  }
+
+  return [];
+}
+
 export async function createPaymentOrder(payload) {
   const { data } = await api.post('/payments/order', payload);
   return data;
@@ -17,12 +29,12 @@ export async function markPaymentFailed(payload) {
 
 export async function getPaymentHistoryByUser(userId) {
   const { data } = await api.get(`/payments/user/${userId}`);
-  return data;
+  return unwrapListPayload(data);
 }
 
 export async function getAllPaymentHistory() {
   const { data } = await api.get('/payments/admin');
-  return data;
+  return unwrapListPayload(data);
 }
 
 export function loadRazorpayCheckoutScript() {

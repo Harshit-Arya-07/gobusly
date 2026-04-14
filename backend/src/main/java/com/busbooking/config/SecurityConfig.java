@@ -1,6 +1,7 @@
 package com.busbooking.config;
 
 import com.busbooking.security.JwtAuthenticationFilter;
+import com.busbooking.security.RateLimitingFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -30,6 +31,7 @@ import java.util.List;
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final RateLimitingFilter rateLimitingFilter;
     private final UserDetailsService userDetailsService;
 
     @Value("${FRONTEND_URL:}")
@@ -46,6 +48,7 @@ public class SecurityConfig {
                         .requestMatchers("/error").permitAll()
                         .anyRequest().authenticated())
                 .authenticationProvider(authenticationProvider())
+                .addFilterBefore(rateLimitingFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();

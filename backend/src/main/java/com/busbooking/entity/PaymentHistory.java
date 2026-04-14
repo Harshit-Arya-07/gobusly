@@ -2,6 +2,7 @@ package com.busbooking.entity;
 
 import lombok.*;
 import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.LocalDateTime;
@@ -19,6 +20,7 @@ public class PaymentHistory {
     @Id
     private String id;
 
+    @Indexed
     private String userId;
 
     private String busId;
@@ -28,6 +30,7 @@ public class PaymentHistory {
 
     private Integer amountInRupees;
 
+    @Indexed(unique = true)
     private String orderId;
 
     private String paymentId;

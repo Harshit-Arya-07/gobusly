@@ -8,8 +8,17 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
+/**
+ * Sends email notifications for payment events.
+ * <p>
+ * The {@link #sendPaymentSuccessEmail} method is marked {@code @Async} so
+ * that SMTP communication does not block the HTTP response to the client.
+ * Requires {@code @EnableAsync} on the application class.
+ * </p>
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -20,12 +29,20 @@ public class EmailNotificationService {
     @Value("${app.mail.from}")
     private String fromEmail;
 
+    @Async
     public void sendPaymentSuccessEmail(User user, Bus bus, PaymentHistory payment) {
         if (user.getEmail() == null || user.getEmail().isBlank()) {
+            log.warn("Skipping payment email: user {} has no email address", user.getId());
             return;
         }
 
-        String busNumber = bus == null ? "-" : bus.getBusNumber();
+        String busName = bus == null || bus.getBusName() == null || bus.getBusName().isBlank()
+            ? "-"
+            : bus.getBusName().trim();
+        String busNumber = bus == null || bus.getBusNumber() == null || bus.getBusNumber().isBlank()
+            ? "-"
+            : bus.getBusNumber().trim();
+        String busLabel = busName.equals(busNumber) ? busNumber : busName + " (" + busNumber + ")";
         String route = bus == null ? "-" : bus.getSource() + " to " + bus.getDestination();
         String departure = bus == null || bus.getTime() == null ? "-" : String.valueOf(bus.getTime());
 
@@ -40,7 +57,7 @@ public class EmailNotificationService {
                 + "- Status: " + payment.getStatus().name() + "\n"
                 + "- Time: " + payment.getUpdatedAt() + "\n\n"
                 + "Bus Details:\n"
-                + "- Bus: " + busNumber + "\n"
+                + "- Bus: " + busLabel + "\n"
                 + "- Route: " + route + "\n"
                 + "- Departure: " + departure + "\n"
                 + "- Seats: " + payment.getSeatNumbers() + "\n\n"
@@ -53,6 +70,7 @@ public class EmailNotificationService {
             message.setSubject(subject);
             message.setText(body);
             mailSender.send(message);
+            log.info("Payment success email sent: paymentId={}, to={}", payment.getId(), user.getEmail());
         } catch (Exception ex) {
             log.warn("Failed to send payment success email for payment {}: {}", payment.getId(), ex.getMessage());
         }

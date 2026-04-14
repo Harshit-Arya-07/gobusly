@@ -5,6 +5,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -16,6 +17,7 @@ import java.io.IOException;
 
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
@@ -47,8 +49,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     SecurityContextHolder.getContext().setAuthentication(authToken);
                 }
             }
-        } catch (Exception ignored) {
-            // If token is invalid/expired, request remains unauthenticated.
+        } catch (Exception ex) {
+            log.debug("JWT authentication failed: {}", ex.getMessage());
         }
 
         filterChain.doFilter(request, response);

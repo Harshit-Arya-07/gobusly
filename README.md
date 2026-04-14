@@ -98,6 +98,7 @@ Bus Booking system/
 - Maven 3.8+
 - Node.js 18+
 - MongoDB instance or MongoDB Atlas connection
+- Redis 6+ instance for seat locking
 - Razorpay account for payment gateway
 - Gmail account with an App Password for email notifications
 
@@ -133,6 +134,37 @@ spring.mail.properties.mail.smtp.starttls.enable=true
 app.mail.from=your_gmail@gmail.com
 ```
 
+### 2.1 Redis setup
+
+The backend uses Redis to lock seats for 5 minutes during checkout.
+
+Local development options:
+
+- Docker:
+
+```bash
+docker run --name bus-redis -p 6379:6379 redis:7-alpine
+```
+
+- WSL/Linux package install:
+
+```bash
+sudo apt update
+sudo apt install redis-server
+sudo service redis-server start
+```
+
+Required Redis properties:
+
+```properties
+spring.data.redis.host=localhost
+spring.data.redis.port=6379
+spring.data.redis.password=
+app.seat-lock.ttl-minutes=5
+```
+
+If you use a managed Redis service in production, keep the same property names and point them to your provider.
+
 ### 3. Frontend configuration
 
 The frontend uses the backend at:
@@ -144,6 +176,41 @@ http://localhost:8080/api
 If your backend runs on a different host or port, update `frontend/src/services/api.js`.
 
 ## Run the project
+
+### Docker (Recommended for quick full-stack start)
+
+From the project root:
+
+```bash
+docker compose up --build
+```
+
+Services:
+
+- Frontend: `http://localhost:3000`
+- Backend API: `http://localhost:8080/api`
+- MongoDB: `localhost:27017`
+- Redis: `localhost:6379`
+
+Default Docker setup uses local MongoDB and Redis containers through `docker-compose.yml`.
+
+To run in detached mode:
+
+```bash
+docker compose up -d --build
+```
+
+To stop and remove containers:
+
+```bash
+docker compose down
+```
+
+To remove containers plus MongoDB data volume:
+
+```bash
+docker compose down -v
+```
 
 ### Backend
 
@@ -194,10 +261,14 @@ Important: If Root Directory is `backend`, then Dockerfile Path must be only `Do
 Add these Environment Variables in Render:
 
 - `SPRING_DATA_MONGODB_URI`
+- `SPRING_DATA_REDIS_HOST`
+- `SPRING_DATA_REDIS_PORT`
+- `SPRING_DATA_REDIS_PASSWORD`
 - `APP_JWT_SECRET`
 - `APP_JWT_EXPIRATION_MS=86400000`
 - `APP_PAYMENT_RAZORPAY_KEY_ID`
 - `APP_PAYMENT_RAZORPAY_KEY_SECRET`
+- `APP_SEAT_LOCK_TTL_MINUTES=5`
 - `SPRING_MAIL_HOST=smtp.gmail.com`
 - `SPRING_MAIL_PORT=587`
 - `SPRING_MAIL_USERNAME`
@@ -206,6 +277,16 @@ Add these Environment Variables in Render:
 - `SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE=true`
 - `APP_MAIL_FROM`
 - `FRONTEND_URL=https://<your-vercel-domain>`
+
+For Razorpay payment to work in production, enter these exact keys in the backend service environment variables on Render:
+
+- `APP_PAYMENT_RAZORPAY_KEY_ID=rzp_test_...` or `rzp_live_...`
+- `APP_PAYMENT_RAZORPAY_KEY_SECRET=...`
+
+Use a matching pair only:
+
+- Test key ID with test secret
+- Live key ID with live secret
 
 ### Frontend (Vercel)
 
@@ -248,14 +329,14 @@ Allow your Vercel frontend domain in backend CORS config (`SecurityConfig`) befo
 
 ## Booking flow
 
-1. User searches a bus
-2. User selects a bus and chooses seats
-3. User reviews the booking summary
-4. Razorpay order is created using the bus fare per seat
-5. Payment is verified after checkout
-6. Booking is created and stored
-7. Payment success email is sent to the user
-8. Booking and payment history become visible in the user dashboard
+1. User searches a bus and selects seats.
+2. `POST /api/payments/order` validates the bus and seats, then creates Redis locks with keys like `seat:{busId}:{seatNumber}`.
+3. The lock is written atomically with a 5 minute TTL, so only one user can hold a seat at a time.
+4. Razorpay checkout runs using the created order.
+5. On payment success, the frontend verifies the payment and then calls booking creation.
+6. `BookingServiceImpl.createBooking()` validates that the current user still owns each Redis lock, persists the booking in MongoDB, and releases the lock.
+7. If payment fails, the backend removes the lock immediately.
+8. If the user abandons checkout, Redis expires the lock automatically.
 
 ## Admin flow
 

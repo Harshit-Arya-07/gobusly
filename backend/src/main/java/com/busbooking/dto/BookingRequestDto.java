@@ -1,5 +1,6 @@
 package com.busbooking.dto;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
@@ -17,4 +18,8 @@ public class BookingRequestDto {
 
     @NotEmpty
     private List<Integer> seatNumbers;
+
+    @NotEmpty
+    @Valid
+    private List<PassengerDetailDto> passengerDetails;
 }

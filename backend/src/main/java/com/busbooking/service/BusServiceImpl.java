@@ -12,43 +12,56 @@ import com.busbooking.exception.UnauthorizedAccessException;
 import com.busbooking.repository.BookingRepository;
 import com.busbooking.repository.BusRepository;
 import com.busbooking.repository.SeatRepository;
-import com.busbooking.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.core.userdetails.UserDetails;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
+import java.util.regex.Pattern;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class BusServiceImpl implements BusService {
 
     private final BusRepository busRepository;
     private final SeatRepository seatRepository;
     private final BookingRepository bookingRepository;
-    private final UserRepository userRepository;
+    private final AuthenticatedUserService authenticatedUserService;
 
     @Override
     @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = "allBuses", allEntries = true),
+            @CacheEvict(value = "busSearch", allEntries = true),
+            @CacheEvict(value = "seatAvailability", allEntries = true)
+    })
     public BusResponseDto createBus(BusRequestDto request) {
-        User currentUser = getCurrentUser();
+        User currentUser = getAdminUser();
+        String busName = resolveBusName(request.getBusName(), request.getBusNumber());
 
         Bus bus = Bus.builder()
                 .busNumber(request.getBusNumber())
+            .busName(busName)
                 .source(request.getSource())
                 .destination(request.getDestination())
                 .time(request.getTime())
                 .totalSeats(request.getTotalSeats())
                 .fareInRupees(request.getFareInRupees())
-            .createdByAdminId(currentUser.getId())
+                .createdByAdminId(currentUser.getId())
                 .build();
 
         Bus savedBus = busRepository.save(bus);
+        log.info("Bus created: id={}, busNumber={}, by admin={}", savedBus.getId(), savedBus.getBusNumber(), currentUser.getId());
 
         List<Seat> seats = new ArrayList<>();
         for (int i = 1; i <= savedBus.getTotalSeats(); i++) {
@@ -64,28 +77,43 @@ public class BusServiceImpl implements BusService {
     }
 
     @Override
+    @Cacheable(value = "allBuses", unless = "#result == null")
     public List<BusResponseDto> getAllBuses() {
-        return busRepository.findAll().stream().map(this::mapToDto).toList();
+        // Use a mutable list for cache serialization compatibility.
+        return busRepository.findAll().stream().map(this::mapToDto).collect(Collectors.toList());
     }
 
     @Override
-        public List<BusResponseDto> searchBuses(String source, String destination, LocalDate travelDate) {
-        String normalizedSource = normalize(source);
-        String normalizedDestination = normalize(destination);
+    @Cacheable(value = "busSearch", key = "#source + '_' + #destination + '_' + #travelDate", unless = "#result == null")
+    public List<BusResponseDto> searchBuses(String source, String destination, LocalDate travelDate) {
+        String sourcePattern = escapeAndBuildPattern(source);
+        String destinationPattern = escapeAndBuildPattern(destination);
 
-        return busRepository.findAll().stream()
-            .filter(bus -> normalizedSource.isEmpty()
-                || normalize(bus.getSource()).contains(normalizedSource))
-            .filter(bus -> normalizedDestination.isEmpty()
-                || normalize(bus.getDestination()).contains(normalizedDestination))
-            .filter(bus -> travelDate == null || bus.getTime().toLocalDate().equals(travelDate))
-                .map(this::mapToDto)
-                .toList();
+        List<Bus> results;
+        if (travelDate != null) {
+            LocalDateTime dayStart = travelDate.atStartOfDay();
+            LocalDateTime dayEnd = travelDate.atTime(LocalTime.MAX);
+            results = busRepository.searchBySourceAndDestinationAndDateRange(
+                    sourcePattern, destinationPattern, dayStart, dayEnd);
+        } else {
+            results = busRepository.searchBySourceAndDestination(sourcePattern, destinationPattern);
+        }
+
+        // Use a mutable list for cache serialization compatibility.
+        return results.stream().map(this::mapToDto).collect(Collectors.toList());
     }
 
     @Override
     @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = "allBuses", allEntries = true),
+            @CacheEvict(value = "busSearch", allEntries = true),
+            @CacheEvict(value = "seatAvailability", allEntries = true)
+    })
     public BusResponseDto updateBus(String id, BusRequestDto request) {
+        throw new UnauthorizedAccessException("Admin role can only add buses");
+
+        /*
         Bus bus = busRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Bus not found with id: " + id));
 
@@ -99,14 +127,22 @@ public class BusServiceImpl implements BusService {
         bus.setFareInRupees(request.getFareInRupees());
 
         Bus updatedBus = busRepository.save(bus);
+        log.info("Bus updated: id={}, busNumber={}", updatedBus.getId(), updatedBus.getBusNumber());
+
         syncSeatsOnBusUpdate(updatedBus.getId(), previousTotalSeats, request.getTotalSeats());
         return mapToDto(updatedBus);
+        */
     }
 
     @Override
     @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = "allBuses", allEntries = true),
+            @CacheEvict(value = "busSearch", allEntries = true),
+            @CacheEvict(value = "seatAvailability", allEntries = true)
+    })
     public void deleteBus(String id) {
-        User currentUser = getCurrentUser();
+        User currentUser = getAdminUser();
 
         Bus bus = busRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Bus not found with id: " + id));
@@ -122,18 +158,31 @@ public class BusServiceImpl implements BusService {
         bookingRepository.deleteByBusId(id);
         seatRepository.deleteByBusId(id);
         busRepository.delete(bus);
+        log.info("Bus deleted: id={}, busNumber={}, by admin={}", id, bus.getBusNumber(), currentUser.getId());
     }
 
     private BusResponseDto mapToDto(Bus bus) {
+        long bookedCount = seatRepository.countByBusIdAndIsBooked(bus.getId(), true);
+        int available = bus.getTotalSeats() - (int) bookedCount;
         return BusResponseDto.builder()
                 .id(bus.getId())
                 .busNumber(bus.getBusNumber())
+                .busName(resolveBusName(bus.getBusName(), bus.getBusNumber()))
                 .source(bus.getSource())
                 .destination(bus.getDestination())
                 .time(bus.getTime())
                 .totalSeats(bus.getTotalSeats())
                 .fareInRupees(bus.getFareInRupees())
+                .availableSeats(available)
                 .build();
+    }
+
+    private String resolveBusName(String busName, String busNumber) {
+        if (busName != null && !busName.isBlank()) {
+            return busName.trim();
+        }
+
+        return busNumber == null ? null : busNumber.trim();
     }
 
     private void syncSeatsOnBusUpdate(String busId, Integer previousTotalSeats, Integer updatedTotalSeats) {
@@ -151,13 +200,12 @@ public class BusServiceImpl implements BusService {
                         .build());
             }
             seatRepository.saveAll(newSeats);
+            log.info("Added {} new seats to bus {}", newSeats.size(), busId);
             return;
         }
 
-        List<Seat> seats = seatRepository.findByBusIdOrderBySeatNumberAsc(busId);
-        List<Seat> removableSeats = seats.stream()
-                .filter(seat -> seat.getSeatNumber() > updatedTotalSeats)
-                .toList();
+        // Use targeted query instead of fetching all seats and filtering in Java
+        List<Seat> removableSeats = seatRepository.findByBusIdAndSeatNumberGreaterThan(busId, updatedTotalSeats);
 
         boolean hasBookedSeatsToRemove = removableSeats.stream().anyMatch(Seat::getIsBooked);
         if (hasBookedSeatsToRemove) {
@@ -166,34 +214,30 @@ public class BusServiceImpl implements BusService {
 
         if (!removableSeats.isEmpty()) {
             seatRepository.deleteAll(removableSeats);
+            log.info("Removed {} seats from bus {}", removableSeats.size(), busId);
         }
     }
 
-    private String normalize(String value) {
-        return value == null ? "" : value.trim().toLowerCase();
+    /**
+     * Escapes user input for safe use in MongoDB regex and wraps it
+     * as a partial-match pattern. Returns {@code ".*"} for empty input
+     * (matches everything).
+     */
+    private String escapeAndBuildPattern(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return ".*";
+        }
+        return ".*" + Pattern.quote(value.trim()) + ".*";
     }
 
-    private User getCurrentUser() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication == null || authentication.getPrincipal() == null) {
-            throw new UnauthorizedAccessException("Unauthenticated access");
-        }
-
-        String email;
-        Object principal = authentication.getPrincipal();
-        if (principal instanceof UserDetails userDetails) {
-            email = userDetails.getUsername();
-        } else {
-            email = authentication.getName();
-        }
-
-        User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new UnauthorizedAccessException("Current user not found"));
-
+    /**
+     * Returns the current user after verifying they have the ADMIN role.
+     */
+    private User getAdminUser() {
+        User user = authenticatedUserService.getCurrentUser();
         if (!Role.ADMIN.equals(user.getRole())) {
             throw new UnauthorizedAccessException("Admin access required");
         }
-
         return user;
     }
 }
