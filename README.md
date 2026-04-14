@@ -1,37 +1,46 @@
 # Bus Booking System
 
-A full-stack bus booking platform with a Spring Boot + MongoDB backend and a React + Vite frontend. The app supports bus search, seat selection, bookings, Razorpay payments, payment history, admin bus management, admin booking management, user authentication, email notifications after successful payment, and role-based access control.
+A full-stack bus booking platform with a Spring Boot + MongoDB backend and a React + Vite frontend. The app supports route/date-based bus discovery, live seat selection, passenger-wise booking, Razorpay payments, booking + payment history, Dockerized local setup, and role-based access control.
 
 ## Features 
 
-### User features
+### User Features
+- Register/login with JWT authentication
+- Password visibility toggle on login/register forms
+- Optional `Remember me for 10 minutes` session persistence
 - Search buses by source, destination, and travel date
-- View available seats for a selected bus
-- Select seats and proceed to payment
-- Pay through Razorpay checkout
-- Receive payment success email with payment details and bus details
-- View booking history
-- View payment history with status, order ID, payment ID, receipt, amount, time, and failure reason
-- Cancel confirmed bookings
-- Login with password visibility toggle
-- Optional `Remember me for 10 minutes` login session
+- Bus listing with quick text filter and sorting (time/seats)
+- Live seat map with Available/Booked/Selected states
+- Multi-seat booking with per-seat passenger details (name, age, gender)
+- Razorpay checkout integration (order creation, verification, failure capture)
+- Idempotent payment and booking flow to reduce duplicate callback issues
+- My Bookings dashboard with status-aware cards (CONFIRMED, FAILED, CANCELLED, PENDING)
+- Cancel own confirmed bookings
+- Download PDF ticket for confirmed/successful bookings
+- View payment history with order ID, payment ID, amount, status, timestamp, and failure reason
+- Email notification after successful payment with booking and bus details
 
-### Admin features
-- Create, update, and delete buses
-- Set per-seat bus fare in rupees
-- View all bookings
-- Cancel bookings from the admin dashboard
-- View full payment ledger with all payment attempts
-- Prevent admins from booking buses
-- Prevent one admin from deleting buses created by another admin
+### Admin Features
+- Role-gated admin dashboard (`/admin/buses`)
+- Create buses with route, departure time, seat count, and fare per seat
+- Delete buses from admin dashboard
+- Ownership-based delete rule: an admin can only delete buses created by the same admin account
+- Admin users are blocked from booking/payment user flows
 
-### Platform behavior
-- JWT-based authentication
-- Role-based route protection
-- Responsive UI for mobile and desktop
-- Razorpay payment order creation and verification
-- Email notification on successful payment
-- Bus-seat synchronization when bus seat count changes
+### Platform and Reliability Features
+- Stateless Spring Security with JWT filter
+- Frontend route guards for authenticated and role-specific pages
+- BCrypt password hashing
+- Configurable CORS with support for local and deployed frontend URLs
+- IP-based rate limiting (stricter for auth endpoints)
+- Request correlation ID propagation (`X-Correlation-Id`) for traceable logs
+- Redis-backed distributed seat locking with TTL (5 min default)
+- Automatic in-memory seat lock fallback when Redis is unavailable
+- Redis caching for bus search, bus list, and seat availability with graceful no-cache fallback
+- Legacy Redis cache-prefix cleanup runner for safe cache-version migrations
+- Async email dispatch with bounded thread pool
+- Dockerized full stack (frontend, backend, MongoDB, Redis) with service healthchecks
+- Responsive UI for desktop and mobile
 
 ## Tech Stack
 
@@ -312,7 +321,7 @@ Allow your Vercel frontend domain in backend CORS config (`SecurityConfig`) befo
 - `/my-bookings` User bookings and payment history
 - `/login` Login page
 - `/register` Register page
-- `/admin/buses` Admin dashboard for buses, bookings, and payment ledger
+- `/admin/buses` Admin dashboard for bus creation and deletion
 
 ## Authentication
 
@@ -341,11 +350,8 @@ Allow your Vercel frontend domain in backend CORS config (`SecurityConfig`) befo
 ## Admin flow
 
 - Admin can create buses and set fare in rupees per seat
-- Admin can update bus details and total seats
-- Bus seat records are synchronized when seat count changes
-- Admin can view all bookings
-- Admin can cancel bookings
-- Admin can view the full payment ledger
+- Admin can delete buses created by the same admin account
+- Admin route is protected on frontend and backend
 - Admins cannot create bookings
 - One admin cannot delete another admin’s buses
 
@@ -405,7 +411,7 @@ Use a Gmail App Password, not your normal account password.
 - `GET /api/buses`
 - `GET /api/buses/search?source=&destination=&date=`
 - `POST /api/buses`
-- `PUT /api/buses/{id}`
+- `PUT /api/buses/{id}` (currently restricted by service policy)
 - `DELETE /api/buses/{id}`
 
 ### Seats
@@ -414,7 +420,7 @@ Use a Gmail App Password, not your normal account password.
 ### Bookings
 - `POST /api/bookings`
 - `GET /api/bookings/user/{userId}`
-- `GET /api/bookings` (admin only)
+- `GET /api/bookings` (endpoint present, currently restricted by service policy)
 - `DELETE /api/bookings/{id}`
 
 ### Payments
@@ -422,7 +428,7 @@ Use a Gmail App Password, not your normal account password.
 - `POST /api/payments/verify`
 - `POST /api/payments/fail`
 - `GET /api/payments/user/{userId}`
-- `GET /api/payments/admin` (admin only)
+- `GET /api/payments/admin` (endpoint present, currently restricted by service policy)
 
 ## Common troubleshooting
 
@@ -453,6 +459,6 @@ The project is actively evolving and currently includes:
 - user booking flow
 - admin dashboard
 - payment processing
-- payment ledger
+- payment history
 - email notifications
 - role-based access control

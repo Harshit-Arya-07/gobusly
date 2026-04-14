@@ -18,6 +18,7 @@ import com.busbooking.exception.UnauthorizedAccessException;
 import com.busbooking.repository.BusRepository;
 import com.busbooking.repository.PaymentHistoryRepository;
 import com.busbooking.repository.SeatRepository;
+import com.busbooking.repository.UserRepository;
 import com.razorpay.Order;
 import com.razorpay.RazorpayClient;
 import com.razorpay.RazorpayException;
@@ -51,6 +52,7 @@ public class PaymentServiceImpl implements PaymentService {
     private final EmailNotificationService emailNotificationService;
     private final SeatLockService seatLockService;
     private final AuthenticatedUserService authenticatedUserService;
+    private final UserRepository userRepository;
     private final RazorpayClient razorpayClient;
 
     @Value("${app.payment.razorpay.key-id:}")
@@ -207,7 +209,8 @@ public class PaymentServiceImpl implements PaymentService {
             log.info("Payment verified: orderId={}, paymentId={}, userId={}",
                     request.getRazorpayOrderId(), request.getRazorpayPaymentId(), paymentHistory.getUserId());
 
-            User bookingUser = authenticatedUserService.getCurrentUser();
+                User bookingUser = userRepository.findById(paymentHistory.getUserId())
+                    .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + paymentHistory.getUserId()));
             Bus bookingBus = busRepository.findById(paymentHistory.getBusId()).orElse(null);
             emailNotificationService.sendPaymentSuccessEmail(bookingUser, bookingBus, paymentHistory);
 
