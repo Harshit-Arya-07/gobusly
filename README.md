@@ -2,6 +2,16 @@
 
 A full-stack bus booking platform with a Spring Boot + MongoDB backend and a React + Vite frontend. The app supports route/date-based bus discovery, live seat selection, passenger-wise booking, Razorpay payments, booking + payment history, Dockerized local setup, and role-based access control.
 
+## 🚀 Live Demo
+[Click Here](https://gobusly.vercel.app/)
+
+## 📸 Screenshots
+
+<p align="center">
+  <img src="screenshots/home.png" width="45%" />
+  <img src="screenshots/dashboard.png" width="45%" />
+</p>
+
 ## Features 
 
 ### User Features
