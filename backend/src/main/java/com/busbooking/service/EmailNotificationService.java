@@ -83,17 +83,47 @@ public class EmailNotificationService {
         }
     }
 
+    @Async
+    public void sendEmailVerificationOtp(String toEmail, String userName, String otp) {
+        if (toEmail == null || toEmail.isBlank()) {
+            log.warn("Skipping verification email: recipient email is blank");
+            return;
+        }
+
+        String subject = "Verify Your Email - gobusly";
+        String body = "Hi " + (userName == null || userName.isBlank() ? "User" : userName) + ",\n\n"
+                + "Your email verification OTP is: " + otp + "\n"
+                + "This OTP is valid for 10 minutes.\n\n"
+                + "If you did not create this account, you can ignore this email.\n\n"
+                + "- gobusly";
+
+        try {
+            String senderEmail = resolveSenderEmail();
+            SimpleMailMessage message = new SimpleMailMessage();
+            if (senderEmail != null && !senderEmail.isBlank()) {
+                message.setFrom(senderEmail);
+            }
+            message.setTo(toEmail);
+            message.setSubject(subject);
+            message.setText(body);
+            mailSender.send(message);
+            log.info("Email verification OTP sent to {}", toEmail);
+        } catch (Exception ex) {
+            log.warn("Failed to send verification OTP to {}: {}", toEmail, ex.getMessage(), ex);
+        }
+    }
+
     private String safe(String value) {
         return value == null || value.isBlank() ? "-" : value;
     }
 
     private String resolveSenderEmail() {
-        if (fromEmail != null && !fromEmail.isBlank()) {
-            return fromEmail.trim();
-        }
-
         if (mailUsername != null && !mailUsername.isBlank()) {
             return mailUsername.trim();
+        }
+
+        if (fromEmail != null && !fromEmail.isBlank()) {
+            return fromEmail.trim();
         }
 
         return null;

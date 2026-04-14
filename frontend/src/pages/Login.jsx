@@ -35,7 +35,12 @@ export default function Login() {
       saveAuth(data, { rememberMe });
       navigate(actualRole === 'ADMIN' ? '/admin/buses' : '/');
     } catch (err) {
-      setError(err.response?.data?.message || 'Login failed');
+      const message = err.response?.data?.message || 'Login failed';
+      if (err.response?.data?.errorCode === 'EMAIL_NOT_VERIFIED') {
+        navigate(`/verify-email?email=${encodeURIComponent(form.email)}`);
+        return;
+      }
+      setError(message);
     } finally {
       setSubmitting(false);
     }

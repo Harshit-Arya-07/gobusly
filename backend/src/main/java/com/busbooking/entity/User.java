@@ -5,6 +5,8 @@ import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
+import java.time.LocalDateTime;
+
 @Document(collection = "users")
 @Getter
 @Setter
@@ -24,4 +26,13 @@ public class User {
     private String password;
 
     private Role role;
+
+    @Builder.Default
+    private Boolean emailVerified = Boolean.FALSE;
+
+    private String emailVerificationOtp;
+
+    private LocalDateTime emailVerificationOtpExpiresAt;
+
+    private LocalDateTime emailVerifiedAt;
 }

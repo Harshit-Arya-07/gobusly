@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { register } from '../services/authService';
-import { saveAuth } from '../utils/auth';
 import { EyeIcon, EyeOffIcon } from '../components/PasswordIcons';
 import BrandLogo from '../components/BrandLogo';
 
@@ -45,9 +44,8 @@ export default function Register() {
         payload.adminSignupCode = form.adminSignupCode;
       }
 
-      const data = await register(payload);
-      saveAuth(data);
-      navigate('/');
+      await register(payload);
+      navigate(`/verify-email?email=${encodeURIComponent(form.email)}`);
     } catch (err) {
       setError(err.response?.data?.message || 'Registration failed');
     } finally {

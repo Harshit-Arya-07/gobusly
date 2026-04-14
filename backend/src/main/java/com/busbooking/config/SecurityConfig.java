@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
@@ -45,9 +46,9 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**").permitAll()
-                        .requestMatchers("GET", "/api/buses").permitAll()
-                        .requestMatchers("GET", "/api/buses/**").permitAll()
-                        .requestMatchers("GET", "/api/seats/**").permitAll()
+                    .requestMatchers(HttpMethod.GET, "/api/buses").permitAll()
+                    .requestMatchers(HttpMethod.GET, "/api/buses/**").permitAll()
+                    .requestMatchers(HttpMethod.GET, "/api/seats/**").permitAll()
                         .requestMatchers("/error").permitAll()
                         .anyRequest().authenticated())
                 .authenticationProvider(authenticationProvider())
