@@ -69,17 +69,15 @@ public class EmailNotificationService {
         try {
             String senderEmail = resolveSenderEmail();
             SimpleMailMessage message = new SimpleMailMessage();
-            if (senderEmail != null && !senderEmail.isBlank()) {
-                message.setFrom(senderEmail);
-            }
+            message.setFrom(senderEmail);
             message.setTo(user.getEmail());
             message.setSubject(subject);
             message.setText(body);
             mailSender.send(message);
             log.info("Payment success email sent: paymentId={}, to={}", payment.getId(), user.getEmail());
         } catch (Exception ex) {
-            log.warn("Failed to send payment success email for payment {} to {}: {}",
-                    payment.getId(), user.getEmail(), ex.getMessage(), ex);
+            log.error("Failed to send payment success email for payment {} to {} using sender {}",
+                    payment.getId(), user.getEmail(), resolveSenderEmail(), ex);
         }
     }
 
@@ -100,16 +98,14 @@ public class EmailNotificationService {
         try {
             String senderEmail = resolveSenderEmail();
             SimpleMailMessage message = new SimpleMailMessage();
-            if (senderEmail != null && !senderEmail.isBlank()) {
-                message.setFrom(senderEmail);
-            }
+            message.setFrom(senderEmail);
             message.setTo(toEmail);
             message.setSubject(subject);
             message.setText(body);
             mailSender.send(message);
             log.info("Email verification OTP sent to {}", toEmail);
         } catch (Exception ex) {
-            log.warn("Failed to send verification OTP to {}: {}", toEmail, ex.getMessage(), ex);
+            log.error("Failed to send verification OTP to {} using sender {}", toEmail, resolveSenderEmail(), ex);
         }
     }
 
@@ -126,6 +122,6 @@ public class EmailNotificationService {
             return fromEmail.trim();
         }
 
-        return null;
+        throw new IllegalStateException("No mail sender is configured. Set SPRING_MAIL_USERNAME or APP_MAIL_FROM.");
     }
 }
