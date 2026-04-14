@@ -1,4 +1,4 @@
-# Bus Booking System
+# GoBusly  -Bus Booking System
 
 A full-stack bus booking platform with a Spring Boot + MongoDB backend and a React + Vite frontend. The app supports route/date-based bus discovery, live seat selection, passenger-wise booking, Razorpay payments, booking + payment history, Dockerized local setup, and role-based access control.
 
