@@ -1,7 +1,11 @@
 import api from './api';
 
 export async function login(payload) {
-  const { data } = await api.post('/auth/login', payload);
+  const { data } = await api.post('/auth/login', payload, {
+    headers: {
+      'Content-Type': 'application/json'
+    }
+  });
   return data;
 }
 

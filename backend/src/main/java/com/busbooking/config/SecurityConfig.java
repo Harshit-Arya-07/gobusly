@@ -82,7 +82,9 @@ public class SecurityConfig {
         List<String> allowedOrigins = new ArrayList<>(List.of(
             "http://localhost:5173",
             "http://127.0.0.1:5173",
-            "https://*.vercel.app"
+            "https://*.vercel.app",
+            "https://*.amplifyapp.com",
+            "https://main.dnylukbt70ue9.amplifyapp.com"
         ));
         if (frontendUrl != null && !frontendUrl.isBlank()) {
             allowedOrigins.add(normalizeOrigin(frontendUrl));

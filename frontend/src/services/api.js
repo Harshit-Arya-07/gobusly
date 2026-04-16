@@ -1,11 +1,18 @@
 import axios from 'axios';
 import { clearAuth, getToken } from '../utils/auth';
 
-const API = import.meta.env.VITE_API_BASE_URL;
-const apiBaseUrl = (API || '/api').replace(/\/$/, '');
+const API = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
+console.log('API URL:', import.meta.env.VITE_API_BASE_URL);
+
+if (!API) {
+  console.warn('VITE_API_BASE_URL is not set. API calls may fail in production.');
+}
 
 const api = axios.create({
-  baseURL: apiBaseUrl
+  baseURL: API,
+  headers: {
+    'Content-Type': 'application/json'
+  }
 });
 
 api.interceptors.request.use((config) => {

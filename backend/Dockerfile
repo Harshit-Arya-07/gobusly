@@ -13,6 +13,13 @@ WORKDIR /app
 
 COPY --from=builder /app/target/gobusly-0.0.1-SNAPSHOT.jar app.jar
 
+RUN useradd -r -u 1001 appuser \
+	&& chown -R appuser:appuser /app
+
+USER appuser
+
+ENV JAVA_OPTS=""
+
 EXPOSE 8080
 
-CMD ["sh", "-c", "java -Dserver.port=${PORT:-8080} -jar app.jar"]
+CMD ["sh", "-c", "java $JAVA_OPTS -Dserver.port=${PORT:-8080} -jar app.jar"]

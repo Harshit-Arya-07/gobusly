@@ -64,10 +64,10 @@ public class EmailNotificationService {
                 + "- Route: " + route + "\n"
                 + "- Departure: " + departure + "\n"
                 + "- Seats: " + payment.getSeatNumbers() + "\n\n"
-                + "Thank you for booking with gobusly.";
+                + "Thank you for booking with Gobusly. ";
 
+        String senderEmail = resolveSenderEmail();
         try {
-            String senderEmail = resolveSenderEmail();
             SimpleMailMessage message = new SimpleMailMessage();
             message.setFrom(senderEmail);
             message.setTo(user.getEmail());
@@ -77,7 +77,7 @@ public class EmailNotificationService {
             log.info("Payment success email sent: paymentId={}, to={}", payment.getId(), user.getEmail());
         } catch (Exception ex) {
             log.error("Failed to send payment success email for payment {} to {} using sender {}",
-                    payment.getId(), user.getEmail(), resolveSenderEmail(), ex);
+                    payment.getId(), user.getEmail(), senderEmail, ex);
         }
     }
 
@@ -95,8 +95,8 @@ public class EmailNotificationService {
                 + "If you did not create this account, you can ignore this email.\n\n"
                 + "- gobusly";
 
+        String senderEmail = resolveSenderEmail();
         try {
-            String senderEmail = resolveSenderEmail();
             SimpleMailMessage message = new SimpleMailMessage();
             message.setFrom(senderEmail);
             message.setTo(toEmail);
@@ -105,7 +105,7 @@ public class EmailNotificationService {
             mailSender.send(message);
             log.info("Email verification OTP sent to {}", toEmail);
         } catch (Exception ex) {
-            log.error("Failed to send verification OTP to {} using sender {}", toEmail, resolveSenderEmail(), ex);
+            log.error("Failed to send verification OTP to {} using sender {}", toEmail, senderEmail, ex);
         }
     }
 
